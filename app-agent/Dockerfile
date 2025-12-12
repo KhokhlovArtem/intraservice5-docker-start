@@ -4,12 +4,7 @@ RUN apk add --no-cache wget unzip
 WORKDIR /download
 RUN wget -q https://storage.yandexcloud.net/intraservice-distr/5.4.7-linux-agent.zip -O site-agent.zip && \
     unzip -q site-agent.zip && \
-    rm site-agent.zip && \
-    # Устанавливаем правильные права НА СЕРТИФИКАТЫ
-    chmod 644 agent/Certificate/*.p8 && \
-    chmod 644 agent/Certificate/*.p12 && \
-    # Устанавливаем права на директорию для ЧТЕНИЯ+ВЫПОЛНЕНИЯ
-    chmod 755 agent/Certificate/
+    rm site-agent.zip
 
 # [BLOCK-2] Финальная стадия
 FROM mcr.microsoft.com/dotnet/aspnet:6.0
@@ -22,38 +17,37 @@ RUN apt-get update && \
 
 WORKDIR /var/www/intraservice.agent
 
-# [BLOCK-4] Копируем содержимое из подготовленной стадии С ПРАВИЛЬНЫМ ВЛАДЕЛЬЦЕМ
+# [BLOCK-4] Копируем содержимое
 COPY --from=preparer /download/agent/ .
 
-# [BLOCK-5] ИСПРАВЛЕНИЕ ПРАВ - КЛЮЧЕВОЙ БЛОК
-RUN echo "=== Установка правильных прав ===" && \
-    # Меняем владельца на root:root сначала
-    chown -R root:root /var/www/intraservice.agent && \
-    # Устанавливаем права 755 на все директории и файлы
-    chmod -R 755 /var/www/intraservice.agent && \
-    # Особые права для файлов сертификатов - 644 (только чтение)
-    chmod 644 /var/www/intraservice.agent/Certificate/*.p8 2>/dev/null || echo "Файлы .p8 не найдены" && \
-    chmod 644 /var/www/intraservice.agent/Certificate/*.p12 2>/dev/null || echo "Файлы .p12 не найдены" && \
-    # Проверяем результат
-    echo "=== Проверка прав ===" && \
-    ls -la /var/www/intraservice.agent/ && \
-    echo "=== Права на Certificate ===" && \
-    ls -la /var/www/intraservice.agent/Certificate/
+# [BLOCK-5] УСТАНАВЛИВАЕМ ПРАВА ДЛЯ ПОЛЬЗОВАТЕЛЯ WWW-DATA (UID 33)
+RUN echo "=== Установка прав для www-data (UID 33) ===" && \
+    # Проверяем существующих пользователей
+    echo "Существующие пользователи:" && \
+    grep -E "(root|www-data)" /etc/passwd && \
+    # Проверяем текущие права
+    echo "Текущие права на Certificate:" && \
+    ls -la /var/www/intraservice.agent/Certificate/ && \
+    # Меняем владельца на www-data:www-data
+    chown -R www-data:www-data /var/www/intraservice.agent && \
+    # Устанавливаем правильные права
+    find /var/www/intraservice.agent -type d -exec chmod 755 {} \; && \
+    find /var/www/intraservice.agent -type f -exec chmod 644 {} \; && \
+    # Проверяем результат от имени www-data
+    echo "Проверка доступа от www-data:" && \
+    sudo -u www-data ls -la /var/www/intraservice.agent/Certificate/ && \
+    sudo -u www-data cat /var/www/intraservice.agent/Certificate/AuthKey_AW34Z3FWSW.p8 | head -c 50 && echo "...OK"
 
 # [BLOCK-6] Копируем шаблон appsettings.json
 COPY appsettings-agent.template.json /appsettings.template.json
 
 EXPOSE 5002
 
-# [BLOCK-7] ВАЖНО: НЕ МЕНЯЕМ ПОЛЬЗОВАТЕЛЯ - оставляем root
-# USER 1000  # ЗАКОММЕНТИРУЙТЕ ЭТУ СТРОКУ
+# [BLOCK-7] Запускаем от пользователя www-data
+USER www-data
 
 # [BLOCK-8] Команда запуска
-CMD ["/bin/bash", "-c", "envsubst < /appsettings.template.json > /var/www/intraservice.agent/appsettings.json && \
+CMD ["/bin/bash", "-c", "echo '=== Запуск от пользователя:' && whoami && echo 'UID:' && id -u && \
+  envsubst < /appsettings.template.json > /var/www/intraservice.agent/appsettings.json && \
   echo 'appsettings.json generated successfully' && \
-  echo '=== Проверка доступа к сертификатам ===' && \
-  ls -la /var/www/intraservice.agent/Certificate/ && \
-  echo '=== Попытка чтения файла ===' && \
-  cat /var/www/intraservice.agent/Certificate/AuthKey_AW34Z3FWSW.p8 | head -c 50 && \
-  echo '...' && \
   exec dotnet /var/www/intraservice.agent/IntraService.Agent.Service.dll"]
