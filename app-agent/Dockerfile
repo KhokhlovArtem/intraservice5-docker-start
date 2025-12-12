@@ -58,7 +58,7 @@ COPY appsettings-agent.template.json /appsettings.template.json
 EXPOSE 5002
 
 # [BLOCK-7] Запускаем от www-data
-USER www-data
+# USER www-data
 
 # [BLOCK-8] Команда запуска с максимальной диагностикой
 CMD ["/bin/bash", "-c", "echo '=== СТАРТ ПРИЛОЖЕНИЯ ===' && \

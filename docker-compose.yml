@@ -44,8 +44,8 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
       - FORWARDED_ALLOW_IPS=*
-      - ASPNETCORE_USER=www-data
-    user: "33:33" 
+#      - ASPNETCORE_USER=www-data
+#    user: "33:33" 
     depends_on:
       - app
     networks:
