@@ -20,34 +20,22 @@ WORKDIR /var/www/intraservice.agent
 # [BLOCK-4] Копируем содержимое
 COPY --from=preparer /download/agent/ .
 
-# [BLOCK-5] УСТАНАВЛИВАЕМ ПРАВА ДЛЯ ПОЛЬЗОВАТЕЛЯ WWW-DATA (UID 33)
-RUN echo "=== Установка прав для www-data (UID 33) ===" && \
-    # Проверяем существующих пользователей
-    echo "Существующие пользователи:" && \
-    grep -E "(root|www-data)" /etc/passwd && \
-    # Проверяем текущие права
-    echo "Текущие права на Certificate:" && \
-    ls -la /var/www/intraservice.agent/Certificate/ && \
-    # Меняем владельца на www-data:www-data
-    chown -R www-data:www-data /var/www/intraservice.agent && \
-    # Устанавливаем правильные права
-    find /var/www/intraservice.agent -type d -exec chmod 755 {} \; && \
-    find /var/www/intraservice.agent -type f -exec chmod 644 {} \; && \
-    # Проверяем результат от имени www-data
-    echo "Проверка доступа от www-data:" && \
-    sudo -u www-data ls -la /var/www/intraservice.agent/Certificate/ && \
-    sudo -u www-data cat /var/www/intraservice.agent/Certificate/AuthKey_AW34Z3FWSW.p8 | head -c 50 && echo "...OK"
+# [BLOCK-5] ПРОСТАЯ УСТАНОВКА ПРАВ
+# Важно: сначала меняем владельца, потом устанавливаем права
+RUN chown -R www-data:www-data /var/www/intraservice.agent && \
+    chmod -R 755 /var/www/intraservice.agent && \
+    chmod 644 /var/www/intraservice.agent/Certificate/*.p8 && \
+    chmod 644 /var/www/intraservice.agent/Certificate/*.p12
 
 # [BLOCK-6] Копируем шаблон appsettings.json
 COPY appsettings-agent.template.json /appsettings.template.json
 
 EXPOSE 5002
 
-# [BLOCK-7] Запускаем от пользователя www-data
+# [BLOCK-7] Запускаем от www-data
 USER www-data
 
 # [BLOCK-8] Команда запуска
-CMD ["/bin/bash", "-c", "echo '=== Запуск от пользователя:' && whoami && echo 'UID:' && id -u && \
-  envsubst < /appsettings.template.json > /var/www/intraservice.agent/appsettings.json && \
+CMD ["/bin/bash", "-c", "envsubst < /appsettings.template.json > /var/www/intraservice.agent/appsettings.json && \
   echo 'appsettings.json generated successfully' && \
   exec dotnet /var/www/intraservice.agent/IntraService.Agent.Service.dll"]
