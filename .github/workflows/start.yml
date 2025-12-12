@@ -84,26 +84,19 @@ jobs:
           # Проверяем логи контейнера app-agent
           docker compose logs app-agent --tail=20
 
-      # [CI-BLOCK-1] Добавьте этот шаг в CI/CD после запуска контейнеров
-      - name: Debug container permissions
+      # Проверка полномочий в контейнере
+      - name: Test container permissions
         run: |
-          echo "=== Диагностика прав в контейнере ==="
-          sleep 10
+          echo "=== Тестирование прав доступа ==="
     
-          # Проверяем, кто владелец процесса
-          docker compose exec -T app-agent whoami
+          # Запускаем временный контейнер для проверки
+          docker run --rm -it \
+            --entrypoint bash \
+            $(docker images | grep intraservice-agent | awk 'NR==1{print $3}') \
+            -c "whoami && id && ls -la /var/www/intraservice.agent/Certificate/ && \
+                cat /var/www/intraservice.agent/Certificate/AuthKey_AW34Z3FWSW.p8 | head -c 50"
           
-          # Проверяем UID процесса dotnet
-          docker compose exec -T app-agent ps aux | grep dotnet
-          
-          # Детальная проверка прав
-          docker compose exec -T app-agent bash -c "ls -la /var/www/intraservice.agent/ && echo '---' && ls -la /var/www/intraservice.agent/Certificate/"
-          
-          # Пытаемся прочитать файл от имени контейнера
-          docker compose exec -T app-agent cat /var/www/intraservice.agent/Certificate/AuthKey_AW34Z3FWSW.p8 | head -c 100
-          
-          # Проверяем inode и детали
-          docker compose exec -T app-agent stat /var/www/intraservice.agent/Certificate/
-          
-          # Проверяем SELinux/AppArmor (если есть)
-          docker compose exec -T app-agent ls -Z /var/www/intraservice.agent/Certificate/ 2>/dev/null || echo "SELinux не активен"
+          # Проверяем образ
+          echo "=== Информация о образе ==="
+          docker image inspect $(docker images | grep intraservice-agent | awk 'NR==1{print $3}') | \
+            grep -A5 -B5 "User\|WorkingDir"
